@@ -1,0 +1,73 @@
+import java.util.Scanner;
+
+abstract class Person {
+    String name;
+    int age;
+
+    // Constructor
+    Person(String name, int age) {
+        this.name = name;
+        this.age = age;
+    }
+
+    // Abstract method
+    abstract void displayDetails();
+}
+
+class Student extends Person {
+    int rollNumber;
+
+    Student(String name, int age, int rollNumber) {
+        super(name, age);
+        this.rollNumber = rollNumber;
+    }
+
+    @Override
+    void displayDetails() {
+        System.out.println("Student Details:");
+        System.out.println("Name: " + name);
+        System.out.println("Age: " + age);
+        System.out.println("Roll Number: " + rollNumber);
+    }
+}
+
+class Teacher extends Person {
+    int subjectCode;
+
+    Teacher(String name, int age, int subjectCode) {
+        super(name, age);
+        this.subjectCode = subjectCode;
+    }
+
+    @Override
+    void displayDetails() {
+        System.out.println("Teacher Details:");
+        System.out.println("Name: " + name);
+        System.out.println("Age: " + age);
+        System.out.println("Subject Code: " + subjectCode);
+    }
+}
+
+public class StudentInformationSystem {
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+
+        int type = sc.nextInt();  // 1 for Student, 2 for Teacher
+        String name = sc.next();
+        int age = sc.nextInt();
+
+        if (type == 1) {
+            int rollNumber = sc.nextInt();
+            Student student = new Student(name, age, rollNumber);
+            student.displayDetails();
+        } else if (type == 2) {
+            int subjectCode = sc.nextInt();
+            Teacher teacher = new Teacher(name, age, subjectCode);
+            teacher.displayDetails();
+        } else {
+            System.out.println("Invalid input type!");
+        }
+
+        sc.close();
+    }
+}
