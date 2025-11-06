@@ -1,0 +1,527 @@
+// === Part A: Dependency Injection in Spring Using Java-Based Configuration ===
+
+// File: src/main/java/parta/service/MessageService.java
+package parta.service;
+public interface MessageService {
+    String send(String to, String msg);
+}
+
+// File: src/main/java/parta/service/EmailService.java
+package parta.service;
+public class EmailService implements MessageService {
+    @Override
+    public String send(String to, String msg) {
+        return "Email sent to " + to + " with message: " + msg;
+    }
+}
+
+// File: src/main/java/parta/service/SmsService.java
+package parta.service;
+public class SmsService implements MessageService {
+    @Override
+    public String send(String to, String msg) {
+        return "SMS sent to " + to + " with message: " + msg;
+    }
+}
+
+// File: src/main/java/parta/consumer/NotificationService.java
+package parta.consumer;
+
+import parta.service.MessageService;
+
+public class NotificationService {
+    private final MessageService messageService;
+    public NotificationService(MessageService messageService) {
+        this.messageService = messageService;
+    }
+    public String notifyUser(String to, String msg) {
+        return messageService.send(to, msg);
+    }
+}
+
+// File: src/main/java/parta/config/AppConfig.java
+package parta.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import parta.consumer.NotificationService;
+import parta.service.EmailService;
+import parta.service.MessageService;
+
+@Configuration
+public class AppConfig {
+
+    @Bean
+    public MessageService messageService() {
+        return new EmailService(); // swap to new SmsService() to change impl
+    }
+
+    @Bean
+    public NotificationService notificationService(MessageService messageService) {
+        return new NotificationService(messageService);
+    }
+}
+
+// File: src/main/java/parta/Main.java
+package parta;
+
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import parta.config.AppConfig;
+import parta.consumer.NotificationService;
+
+public class Main {
+    public static void main(String[] args) {
+        try (var ctx = new AnnotationConfigApplicationContext(AppConfig.class)) {
+            var notifier = ctx.getBean(NotificationService.class);
+            System.out.println(notifier.notifyUser("alice@example.com", "Hello from Spring DI!"));
+        }
+    }
+}
+
+<!-- === Part B & C: Maven pom.xml (Spring + Hibernate + H2) === -->
+<!-- File: pom.xml -->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>spring-hibernate-demo</artifactId>
+  <version>1.0.0</version>
+  <properties>
+    <maven.compiler.source>17</maven.compiler.source>
+    <maven.compiler.target>17</maven.compiler.target>
+    <spring.version>5.3.39</spring.version>
+    <hibernate.version>5.6.15.Final</hibernate.version>
+  </properties>
+  <dependencies>
+    <!-- Spring Core/Context/Tx/ORM -->
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-context</artifactId>
+      <version>${spring.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-tx</artifactId>
+      <version>${spring.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-orm</artifactId>
+      <version>${spring.version}</version>
+    </dependency>
+
+    <!-- Hibernate -->
+    <dependency>
+      <groupId>org.hibernate</groupId>
+      <artifactId>hibernate-core</artifactId>
+      <version>${hibernate.version}</version>
+    </dependency>
+
+    <!-- H2 in-memory DB (swap for MySQL/PostgreSQL if desired) -->
+    <dependency>
+      <groupId>com.h2database</groupId>
+      <artifactId>h2</artifactId>
+      <version>2.2.224</version>
+      <scope>runtime</scope>
+    </dependency>
+
+    <!-- JPA annotations (optional but handy) -->
+    <dependency>
+      <groupId>jakarta.persistence</groupId>
+      <artifactId>jakarta.persistence-api</artifactId>
+      <version>2.2.3</version>
+    </dependency>
+
+    <!-- Logging -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-simple</artifactId>
+      <version>2.0.13</version>
+      <scope>runtime</scope>
+    </dependency>
+  </dependencies>
+</project>
+
+// === Part B: Hibernate Application for Student CRUD Operations (standalone Hibernate, no Spring) ===
+
+// File: src/main/java/partb/entity/Student.java
+package partb.entity;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "students")
+public class Student {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable=false, length=100)
+    private String name;
+
+    private Integer age;
+
+    @Column(length=120, unique = true)
+    private String email;
+
+    public Student() {}
+    public Student(String name, Integer age, String email) {
+        this.name = name; this.age = age; this.email = email;
+    }
+    public Long getId() { return id; }
+    public String getName() { return name; }
+    public Integer getAge() { return age; }
+    public String getEmail() { return email; }
+    public void setName(String name) { this.name = name; }
+    public void setAge(Integer age) { this.age = age; }
+    public void setEmail(String email) { this.email = email; }
+
+    @Override public String toString() {
+        return "Student{id=%d, name='%s', age=%d, email='%s'}"
+                .formatted(id, name, age, email);
+    }
+}
+
+// File: src/main/java/partb/util/HibernateUtil.java
+package partb.util;
+
+import org.hibernate.SessionFactory;
+import org.hibernate.boot.registry.StandardServiceRegistryBuilder;
+import org.hibernate.cfg.Configuration;
+import partb.entity.Student;
+
+import java.util.Properties;
+
+public class HibernateUtil {
+    private static final SessionFactory sessionFactory = buildSessionFactory();
+    private static SessionFactory buildSessionFactory() {
+        try {
+            Properties props = new Properties();
+            props.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
+            props.put("hibernate.hbm2ddl.auto", "update");
+            props.put("hibernate.show_sql", "true");
+            props.put("hibernate.format_sql", "true");
+            props.put("hibernate.connection.driver_class", "org.h2.Driver");
+            props.put("hibernate.connection.url", "jdbc:h2:mem:studentsdb;DB_CLOSE_DELAY=-1");
+            props.put("hibernate.connection.username", "sa");
+            props.put("hibernate.connection.password", "");
+
+            Configuration cfg = new Configuration();
+            cfg.addProperties(props);
+            cfg.addAnnotatedClass(Student.class);
+
+            var serviceRegistry = new StandardServiceRegistryBuilder()
+                    .applySettings(cfg.getProperties()).build();
+            return cfg.buildSessionFactory(serviceRegistry);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to build SessionFactory", e);
+        }
+    }
+    public static SessionFactory getSessionFactory() { return sessionFactory; }
+    public static void shutdown() { sessionFactory.close(); }
+}
+
+// File: src/main/java/partb/dao/StudentDAO.java
+package partb.dao;
+
+import org.hibernate.Session;
+import org.hibernate.Transaction;
+import partb.entity.Student;
+import partb.util.HibernateUtil;
+
+import java.util.List;
+import java.util.Optional;
+
+public class StudentDAO {
+    public Long save(Student s) {
+        Transaction tx = null;
+        try (Session session = HibernateUtil.getSessionFactory().openSession()) {
+            tx = session.beginTransaction();
+            Long id = (Long) session.save(s);
+            tx.commit();
+            return id;
+        } catch (Exception e) {
+            if (tx != null) tx.rollback();
+            throw e;
+        }
+    }
+
+    public Optional<Student> findById(Long id) {
+        try (Session session = HibernateUtil.getSessionFactory().openSession()) {
+            return Optional.ofNullable(session.get(Student.class, id));
+        }
+    }
+
+    public List<Student> findAll() {
+        try (Session session = HibernateUtil.getSessionFactory().openSession()) {
+            return session.createQuery("from Student", Student.class).list();
+        }
+    }
+
+    public void update(Student s) {
+        Transaction tx = null;
+        try (Session session = HibernateUtil.getSessionFactory().openSession()) {
+            tx = session.beginTransaction();
+            session.update(s);
+            tx.commit();
+        } catch (Exception e) {
+            if (tx != null) tx.rollback();
+            throw e;
+        }
+    }
+
+    public void delete(Long id) {
+        Transaction tx = null;
+        try (Session session = HibernateUtil.getSessionFactory().openSession()) {
+            tx = session.beginTransaction();
+            Student s = session.get(Student.class, id);
+            if (s != null) session.delete(s);
+            tx.commit();
+        } catch (Exception e) {
+            if (tx != null) tx.rollback();
+            throw e;
+        }
+    }
+}
+
+// File: src/main/java/partb/MainCRUD.java
+package partb;
+
+import partb.dao.StudentDAO;
+import partb.entity.Student;
+import partb.util.HibernateUtil;
+
+public class MainCRUD {
+    public static void main(String[] args) {
+        StudentDAO dao = new StudentDAO();
+
+        Long id1 = dao.save(new Student("Alice", 20, "alice@example.com"));
+        Long id2 = dao.save(new Student("Bob", 22, "bob@example.com"));
+
+        System.out.println("All: " + dao.findAll());
+
+        var s1 = dao.findById(id1).orElseThrow();
+        s1.setAge(21);
+        dao.update(s1);
+        System.out.println("Updated: " + dao.findById(id1).orElseThrow());
+
+        dao.delete(id2);
+        System.out.println("After delete: " + dao.findAll());
+
+        HibernateUtil.shutdown();
+    }
+}
+
+
+// === Part C: Transaction Management Using Spring and Hibernate (Java Config) ===
+
+// File: src/main/java/partc/entity/Student.java
+package partc.entity;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name = "students_tx")
+public class Student {
+    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable=false, length=100)
+    private String name;
+
+    private Integer age;
+
+    @Column(length=120, unique = true)
+    private String email;
+
+    public Student() {}
+    public Student(String name, Integer age, String email) {
+        this.name = name; this.age = age; this.email = email;
+    }
+    public Long getId() { return id; }
+    public String getName() { return name; }
+    public Integer getAge() { return age; }
+    public String getEmail() { return email; }
+    public void setName(String name) { this.name = name; }
+    public void setAge(Integer age) { this.age = age; }
+    public void setEmail(String email) { this.email = email; }
+    @Override public String toString() {
+        return "Student{id=%d, name='%s', age=%d, email='%s'}"
+                .formatted(id, name, age, email);
+    }
+}
+
+// File: src/main/java/partc/dao/StudentRepository.java
+package partc.dao;
+
+import org.hibernate.SessionFactory;
+import org.hibernate.Session;
+import org.springframework.stereotype.Repository;
+import partc.entity.Student;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public class StudentRepository {
+    private final SessionFactory sessionFactory;
+    public StudentRepository(SessionFactory sessionFactory) {
+        this.sessionFactory = sessionFactory;
+    }
+
+    private Session currentSession() {
+        return sessionFactory.getCurrentSession();
+    }
+
+    public Long save(Student s) {
+        return (Long) currentSession().save(s);
+    }
+
+    public Optional<Student> findById(Long id) {
+        return Optional.ofNullable(currentSession().get(Student.class, id));
+    }
+
+    public List<Student> findAll() {
+        return currentSession().createQuery("from Student", Student.class).list();
+    }
+
+    public void update(Student s) {
+        currentSession().update(s);
+    }
+
+    public void delete(Long id) {
+        Student s = currentSession().get(Student.class, id);
+        if (s != null) currentSession().delete(s);
+    }
+}
+
+// File: src/main/java/partc/service/StudentService.java
+package partc.service;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import partc.dao.StudentRepository;
+import partc.entity.Student;
+
+import java.util.List;
+
+@Service
+public class StudentService {
+    private final StudentRepository repo;
+    public StudentService(StudentRepository repo) { this.repo = repo; }
+
+    @Transactional(readOnly = true)
+    public List<Student> list() { return repo.findAll(); }
+
+    @Transactional
+    public Long create(Student s) { return repo.save(s); }
+
+    @Transactional
+    public void updateEmail(Long id, String newEmail) {
+        var s = repo.findById(id).orElseThrow();
+        s.setEmail(newEmail);
+        repo.update(s);
+    }
+
+    // Demonstrates rollback on runtime exception
+    @Transactional
+    public void batchCreateWithRollback(Student a, Student b) {
+        repo.save(a);
+        if (true) throw new RuntimeException("Forcing rollback");
+        // repo.save(b);
+    }
+
+    @Transactional
+    public void delete(Long id) { repo.delete(id); }
+}
+
+// File: src/main/java/partc/config/PersistenceConfig.java
+package partc.config;
+
+import org.hibernate.SessionFactory;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.orm.hibernate5.HibernateTransactionManager;
+import org.springframework.orm.hibernate5.LocalSessionFactoryBean;
+import org.springframework.transaction.annotation.EnableTransactionManagement;
+
+import javax.sql.DataSource;
+import org.h2.jdbcx.JdbcDataSource;
+
+import java.util.Properties;
+
+@Configuration
+@EnableTransactionManagement
+public class PersistenceConfig {
+
+    @Bean
+    public DataSource dataSource() {
+        JdbcDataSource ds = new JdbcDataSource();
+        ds.setURL("jdbc:h2:mem:txdb;DB_CLOSE_DELAY=-1");
+        ds.setUser("sa");
+        ds.setPassword("");
+        return ds;
+    }
+
+    @Bean
+    public LocalSessionFactoryBean sessionFactory(DataSource dataSource) {
+        LocalSessionFactoryBean factory = new LocalSessionFactoryBean();
+        factory.setDataSource(dataSource);
+        factory.setPackagesToScan("partc.entity");
+        Properties props = new Properties();
+        props.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
+        props.put("hibernate.hbm2ddl.auto", "update");
+        props.put("hibernate.show_sql", "true");
+        props.put("hibernate.format_sql", "true");
+        props.put("hibernate.current_session_context_class", "org.springframework.orm.hibernate5.SpringSessionContext");
+        factory.setHibernateProperties(props);
+        return factory;
+    }
+
+    @Bean
+    public HibernateTransactionManager transactionManager(SessionFactory sessionFactory) {
+        return new HibernateTransactionManager(sessionFactory);
+    }
+}
+
+// File: src/main/java/partc/MainTx.java
+package partc;
+
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import partc.config.PersistenceConfig;
+import partc.entity.Student;
+import partc.service.StudentService;
+
+public class MainTx {
+    public static void main(String[] args) {
+        try (var ctx = new AnnotationConfigApplicationContext(PersistenceConfig.class)) {
+            var svc = ctx.getBean(StudentService.class);
+
+            Long id1 = svc.create(new Student("Carol", 23, "carol@example.com"));
+            Long id2 = svc.create(new Student("Dave", 24, "dave@example.com"));
+            System.out.println("Initial: " + svc.list());
+
+            svc.updateEmail(id1, "carol@uni.edu");
+            System.out.println("After email update: " + svc.list());
+
+            try {
+                svc.batchCreateWithRollback(
+                    new Student("Eve", 22, "eve@example.com"),
+                    new Student("Frank", 25, "frank@example.com")
+                );
+            } catch (RuntimeException ex) {
+                System.out.println("Caught: " + ex.getMessage());
+            }
+            System.out.println("After forced rollback (no Eve/Frank): " + svc.list());
+
+            svc.delete(id2);
+            System.out.println("After delete Dave: " + svc.list());
+        }
+    }
+}
+
+
+
+
+
